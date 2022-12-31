@@ -1,0 +1,12 @@
+[package]
+name = "hexlife-viewer"
+version = "0.1.0"
+authors = ["petrak@ <petrathekat@gmail.com>"]
+
+edition = "2021"
+
+[dependencies]
+hex2d = "1.1.0"
+hexlife = { path = ".." }
+macroquad = "0.3.25"
+
