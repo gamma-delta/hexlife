@@ -37,7 +37,7 @@ fn config() -> Conf {
 async fn main() {
     let mut state = GameState {
         board: Board::new(),
-        rule: Rule::new_raw(0b01100, 0b01100),
+        rule: Rule::new_raw(0b01100, 0b00100),
         running: RunState::Stopped,
 
         campos: Vec2::ZERO,
