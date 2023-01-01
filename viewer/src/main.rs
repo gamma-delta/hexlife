@@ -5,7 +5,7 @@ use std::f32::consts::TAU;
 
 use hex2d::Direction;
 use hexlife::{
-    math::{EdgePos, HexCoord},
+    math::{Aliveness, EdgePos, HexCoord},
     Board, NeighborRegion, Rule,
 };
 use macroquad::prelude::*;
@@ -24,7 +24,7 @@ struct GameState {
     running: RunState,
 
     /// Allow click and drag for edges but prevent flickering
-    prev_clicked_edge: Option<EdgePos>,
+    drag_state: Option<Aliveness>,
 
     campos: Vec2,
     zoom: f32,
@@ -35,9 +35,10 @@ impl GameState {
     fn new() -> Self {
         Self {
             board: Board::new(),
-            rule: Rule::new_raw(0b0001000, 0b0011000, NeighborRegion::Ten),
+            rule: Rule::new_raw(0b0001000, 0b0011100, NeighborRegion::Ten),
             running: RunState::Stopped,
-            prev_clicked_edge: None,
+
+            drag_state: None,
 
             campos: Vec2::ZERO,
             zoom: 48.0,

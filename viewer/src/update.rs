@@ -61,7 +61,9 @@ impl GameState {
 
         if is_mouse_button_down(MouseButton::Left) {
             let mouse_edge = self.mouse_edge();
-            let state = self.drag_state.unwrap_or_else(|| self.board.get_liveness(mouse_edge).flip());
+            let state = self
+                .drag_state
+                .unwrap_or_else(|| self.board.get_liveness(mouse_edge).flip());
             self.board.set_alive(mouse_edge, state);
             self.drag_state = Some(state);
         } else {

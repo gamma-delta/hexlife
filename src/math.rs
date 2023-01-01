@@ -94,10 +94,11 @@ impl Aliveness {
             _ => unreachable!(),
         }
     }
+
     pub fn flip(&self) -> Self {
         match self {
             Aliveness::Dead | Aliveness::Barren => Aliveness::Alive,
-            _ => Aliveness::Dead,
+            Aliveness::Alive => Aliveness::Dead,
         }
     }
 }

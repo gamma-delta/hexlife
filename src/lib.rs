@@ -56,13 +56,7 @@ impl Board {
     /// Go dead or barren to alive, alive to dead
     pub fn twiddle_alive(&mut self, pos: EdgePos) {
         let alive_here = self.get_liveness(pos);
-        self.set_alive(
-            pos,
-            match alive_here {
-                Aliveness::Dead | Aliveness::Barren => Aliveness::Alive,
-                _ => Aliveness::Dead,
-            },
-        );
+        self.set_alive(pos, alive_here.flip());
     }
 
     /// Get the three edges at the given position
