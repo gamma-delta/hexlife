@@ -24,32 +24,13 @@ struct GameState {
     zoom: f32,
 }
 
-impl GameState {}
-
-fn config() -> Conf {
-    Conf {
-        window_title: "HexLife".to_string(),
-        ..Default::default()
-    }
-}
-
-#[macroquad::main(config)]
-async fn main() {
-    let mut state = GameState {
-        board: Board::new(),
-        rule: Rule::new_raw(0b01100, 0b00100),
-        running: RunState::Stopped,
-
-        campos: Vec2::ZERO,
-        zoom: 32.0,
-    };
-
-    loop {
+impl GameState {
+    fn update(&mut self) {
         let wheel_y = mouse_wheel().1;
         if wheel_y < 0.0 {
-            state.zoom /= ZOOM_SPEED;
+            self.zoom /= ZOOM_SPEED;
         } else if wheel_y > 0.0 {
-            state.zoom *= ZOOM_SPEED;
+            self.zoom *= ZOOM_SPEED;
         }
 
         let mut delta_view = (0.0, 0.0);
@@ -65,41 +46,45 @@ async fn main() {
         if is_key_down(KeyCode::D) {
             delta_view.0 += 1.0;
         }
-        state.campos += Vec2::from(delta_view) * MOVE_SPEED;
+        self.campos += Vec2::from(delta_view) * MOVE_SPEED;
 
         if is_key_pressed(KeyCode::Space) {
-            state.running = if state.running == RunState::Run {
+            self.running = if self.running == RunState::Run {
                 RunState::Stopped
             } else {
                 RunState::Run
             };
         } else if is_key_pressed(KeyCode::Enter) {
-            state.running = RunState::OneStep;
+            self.running = RunState::OneStep;
         }
 
-        let mouse_hexpos = px_to_coord(Vec2::from(mouse_position()) + state.campos, state.zoom);
+        let mouse_hexpos = px_to_coord(Vec2::from(mouse_position()) + self.campos, self.zoom);
         if is_mouse_button_pressed(MouseButton::Left) {
-            let ideal_mousepos = coord_to_px(mouse_hexpos, state.zoom);
-            let delta = Vec2::from(mouse_position()) + state.campos - ideal_mousepos;
+            let ideal_mousepos = coord_to_px(mouse_hexpos, self.zoom);
+            let delta = Vec2::from(mouse_position()) + self.campos - ideal_mousepos;
             let angle = delta.y.atan2(delta.x);
             let clean_angle = ((angle / TAU) * 6.0).round() as i32;
             let dir = Direction::from_int(1 - clean_angle);
             let edgepos = EdgePos::new(mouse_hexpos, dir);
-            state.board.toggle_alive(edgepos);
+            self.board.toggle_alive(edgepos);
         }
 
-        match state.running {
+        match self.running {
             RunState::Stopped => {}
             RunState::OneStep => {
-                state.board.apply_rule(state.rule);
-                state.running = RunState::Stopped;
+                self.board.apply_rule(self.rule);
+                self.running = RunState::Stopped;
             }
             RunState::Run => {
-                state.board.apply_rule(state.rule);
+                self.board.apply_rule(self.rule);
             }
         }
+    }
 
+    fn draw(&self) {
         clear_background(Color::from_rgba(0x05, 0x07, 0x10, 0xff));
+
+        let mouse_hexpos = px_to_coord(Vec2::from(mouse_position()) + self.campos, self.zoom);
 
         enum DrawStage {
             Background,
@@ -109,15 +94,15 @@ async fn main() {
         let scrw_half = screen_width() / 2.0;
         let scrh_half = screen_height() / 2.0;
         let corner_dist = (scrw_half * scrw_half + scrh_half * scrh_half).sqrt();
-        let corner_hex_dist = corner_dist / state.zoom;
-        let center_hexpos = px_to_coord(state.campos + vec2(scrw_half, scrh_half), state.zoom);
+        let corner_hex_dist = corner_dist / self.zoom;
+        let center_hexpos = px_to_coord(self.campos + vec2(scrw_half, scrh_half), self.zoom);
 
         for stage in [DrawStage::Background, DrawStage::Edges] {
             // it appears range_iter is bugged and only produces coords around 0
             for coord_offset in HexCoord::new(0, 0).range_iter(corner_hex_dist.round() as i64 + 1) {
                 let coord = center_hexpos + coord_offset;
-                let px = coord_to_px(coord, state.zoom)
-                    - vec2(state.campos.x.trunc(), state.campos.y.trunc());
+                let px = coord_to_px(coord, self.zoom)
+                    - vec2(self.campos.x.trunc(), self.campos.y.trunc());
 
                 match stage {
                     DrawStage::Background => {
@@ -130,20 +115,20 @@ async fn main() {
                                         [(coord.x + coord.y * 3).rem_euclid(4) as usize],
                             )
                         };
-                        draw_poly(px.x, px.y, 6, state.zoom, 360.0 / 12.0, color);
+                        draw_poly(px.x, px.y, 6, self.zoom, 360.0 / 12.0, color);
 
                         if is_key_down(KeyCode::LeftShift) {
                             draw_text(
                                 &format!("{},{}", coord.x, coord.y),
-                                px.x - state.zoom / 2.0,
-                                px.y - state.zoom / 4.0,
-                                state.zoom / 2.0,
+                                px.x - self.zoom / 2.0,
+                                px.y - self.zoom / 4.0,
+                                self.zoom / 2.0,
                                 WHITE,
                             );
                         }
                     }
                     DrawStage::Edges => {
-                        let edges = state.board.get_edges(coord).unwrap_or_default();
+                        let edges = self.board.get_edges(coord).unwrap_or_default();
                         for (angle, edge) in [
                             TAU * 1.0 / 12.0,
                             TAU * 3.0 / 12.0,
@@ -157,10 +142,10 @@ async fn main() {
                             RestrictedHexDir::ZX,
                         ]) {
                             if !edges.contains(edge) {
-                                let sx = angle[0].cos() * state.zoom;
-                                let sy = -angle[0].sin() * state.zoom;
-                                let ex = angle[1].cos() * state.zoom;
-                                let ey = -angle[1].sin() * state.zoom;
+                                let sx = angle[0].cos() * self.zoom;
+                                let sy = -angle[0].sin() * self.zoom;
+                                let ex = angle[1].cos() * self.zoom;
+                                let ey = -angle[1].sin() * self.zoom;
                                 draw_line(
                                     sx + px.x,
                                     sy + px.y,
@@ -177,8 +162,8 @@ async fn main() {
                             (RestrictedHexDir::ZX, TAU * 3.0 / 6.0),
                         ] {
                             if edges.contains(dir) {
-                                let ex = angle.cos() * state.zoom * SQRT_3;
-                                let ey = -angle.sin() * state.zoom * SQRT_3;
+                                let ex = angle.cos() * self.zoom * SQRT_3;
+                                let ey = -angle.sin() * self.zoom * SQRT_3;
                                 draw_line(
                                     px.x,
                                     px.y,
@@ -193,6 +178,38 @@ async fn main() {
                 }
             }
         }
+
+        draw_text(
+            &format!("{}; {:?}", self.rule, self.running),
+            12.0,
+            12.0,
+            16.0,
+            WHITE,
+        );
+    }
+}
+
+fn config() -> Conf {
+    Conf {
+        window_title: "HexLife".to_string(),
+        ..Default::default()
+    }
+}
+
+#[macroquad::main(config)]
+async fn main() {
+    let mut state = GameState {
+        board: Board::new(),
+        rule: Rule::new_raw(0b0001000, 0b0001100),
+        running: RunState::Stopped,
+
+        campos: Vec2::ZERO,
+        zoom: 32.0,
+    };
+
+    loop {
+        state.update();
+        state.draw();
         next_frame().await
     }
 }

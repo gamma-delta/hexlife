@@ -62,11 +62,15 @@ impl Board {
                 }
                 let real_dir = edge.to_hex2d();
                 let neighbor_pos = coord + real_dir;
+                // Pick six "neighbors":
+                // the four direct neighbors and the 2 distant neighbors.
                 for neighbor in [
                     EdgePos::new(coord, real_dir + Angle::Left),
                     EdgePos::new(coord, real_dir + Angle::Right),
+                    EdgePos::new(coord, real_dir + Angle::Back),
                     EdgePos::new(neighbor_pos, real_dir + Angle::LeftBack),
                     EdgePos::new(neighbor_pos, real_dir + Angle::RightBack),
+                    EdgePos::new(neighbor_pos, real_dir),
                 ] {
                     let slot = neighbor_count.entry(neighbor).or_default();
                     *slot += 1;
@@ -98,8 +102,8 @@ pub struct Rule {
 impl Rule {
     pub fn new_raw(birth_mask: u8, survive_mask: u8) -> Self {
         assert!(
-            birth_mask <= 0b11111 && survive_mask <= 0b11111,
-            "only masks with the low 5 bits set make any sense"
+            birth_mask <= 0b1111111 && survive_mask <= 0b1111111,
+            "only masks with the low 7 bits set make any sense"
         );
         Self {
             birth_mask,
