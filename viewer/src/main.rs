@@ -8,7 +8,9 @@ use hexlife::{
 use macroquad::prelude::*;
 
 const ZOOM_SPEED: f32 = 1.1;
-const MOVE_SPEED: f32 = 8.0;
+// Pick weird numbers to prevent the hexes moving an integer number
+const MOVE_SPEED: f32 = 17.0;
+const SUPER_MOVE_SPEED: f32 = 43.0;
 
 const SQRT_3: f32 = 1.7320508;
 
@@ -25,14 +27,24 @@ struct GameState {
 }
 
 impl GameState {
-    fn update(&mut self) {
-        let wheel_y = mouse_wheel().1;
-        if wheel_y < 0.0 {
-            self.zoom /= ZOOM_SPEED;
-        } else if wheel_y > 0.0 {
-            self.zoom *= ZOOM_SPEED;
-        }
+    // https://www.youtube.com/watch?v=ZQ8qtAizis4
+    fn world_to_screen(&self, px: Vec2) -> Vec2 {
+        (px - self.campos) * self.zoom
+    }
 
+    fn screen_to_world(&self, px: Vec2) -> Vec2 {
+        px / self.zoom + self.campos
+    }
+
+    fn screen_to_hex(&self, px: Vec2) -> HexCoord {
+        px_to_coord(self.screen_to_world(px), 1.0)
+    }
+
+    fn hex_to_screen(&self, coord: HexCoord) -> Vec2 {
+        self.world_to_screen(coord_to_px(coord, 1.0))
+    }
+
+    fn update(&mut self) {
         let mut delta_view = (0.0, 0.0);
         if is_key_down(KeyCode::W) {
             delta_view.1 -= 1.0;
@@ -46,7 +58,24 @@ impl GameState {
         if is_key_down(KeyCode::D) {
             delta_view.0 += 1.0;
         }
-        self.campos += Vec2::from(delta_view) * MOVE_SPEED;
+        self.campos += Vec2::from(delta_view)
+            * if is_key_down(KeyCode::LeftShift) {
+                SUPER_MOVE_SPEED
+            } else {
+                MOVE_SPEED
+            }
+            / self.zoom;
+
+        let mouse_prezoom = self.screen_to_world(mouse_position().into());
+        let wheel_y = mouse_wheel().1;
+        if wheel_y < 0.0 {
+            self.zoom /= ZOOM_SPEED;
+        } else if wheel_y > 0.0 {
+            self.zoom *= ZOOM_SPEED;
+        }
+        let mouse_postzoom = self.screen_to_world(mouse_position().into());
+        // javidx9 is the coolest person alive
+        self.campos += mouse_prezoom - mouse_postzoom;
 
         if is_key_pressed(KeyCode::Space) {
             self.running = if self.running == RunState::Run {
@@ -58,14 +87,16 @@ impl GameState {
             self.running = RunState::OneStep;
         }
 
-        let mouse_hexpos = px_to_coord(Vec2::from(mouse_position()) + self.campos, self.zoom);
+        let mouse_world = self.screen_to_world(mouse_position().into());
+        let mouse_hexpos = self.screen_to_hex(mouse_position().into());
         if is_mouse_button_pressed(MouseButton::Left) {
-            let ideal_mousepos = coord_to_px(mouse_hexpos, self.zoom);
-            let delta = Vec2::from(mouse_position()) + self.campos - ideal_mousepos;
+            let ideal_mousepos = coord_to_px(mouse_hexpos, 1.0);
+            let delta = mouse_world - ideal_mousepos;
             let angle = delta.y.atan2(delta.x);
             let clean_angle = ((angle / TAU) * 6.0).round() as i32;
             let dir = Direction::from_int(1 - clean_angle);
             let edgepos = EdgePos::new(mouse_hexpos, dir);
+            // println!("toggling {:?},{:?}", mouse_hexpos, dir);
             self.board.toggle_alive(edgepos);
         }
 
@@ -84,7 +115,7 @@ impl GameState {
     fn draw(&self) {
         clear_background(Color::from_rgba(0x05, 0x07, 0x10, 0xff));
 
-        let mouse_hexpos = px_to_coord(Vec2::from(mouse_position()) + self.campos, self.zoom);
+        let mouse_hexpos = self.screen_to_hex(mouse_position().into());
 
         enum DrawStage {
             Background,
@@ -95,14 +126,13 @@ impl GameState {
         let scrh_half = screen_height() / 2.0;
         let corner_dist = (scrw_half * scrw_half + scrh_half * scrh_half).sqrt();
         let corner_hex_dist = corner_dist / self.zoom;
-        let center_hexpos = px_to_coord(self.campos + vec2(scrw_half, scrh_half), self.zoom);
+        let center_hexpos = self.screen_to_hex(vec2(scrw_half, scrh_half));
 
         for stage in [DrawStage::Background, DrawStage::Edges] {
             // it appears range_iter is bugged and only produces coords around 0
             for coord_offset in HexCoord::new(0, 0).range_iter(corner_hex_dist.round() as i64 + 1) {
                 let coord = center_hexpos + coord_offset;
-                let px = coord_to_px(coord, self.zoom)
-                    - vec2(self.campos.x.trunc(), self.campos.y.trunc());
+                let px = self.hex_to_screen(coord);
 
                 match stage {
                     DrawStage::Background => {
@@ -117,7 +147,7 @@ impl GameState {
                         };
                         draw_poly(px.x, px.y, 6, self.zoom, 360.0 / 12.0, color);
 
-                        if is_key_down(KeyCode::LeftShift) {
+                        if is_key_down(KeyCode::LeftControl) {
                             draw_text(
                                 &format!("{},{}", coord.x, coord.y),
                                 px.x - self.zoom / 2.0,
@@ -204,7 +234,7 @@ async fn main() {
         running: RunState::Stopped,
 
         campos: Vec2::ZERO,
-        zoom: 32.0,
+        zoom: 48.0,
     };
 
     loop {
