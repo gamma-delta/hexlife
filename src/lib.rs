@@ -2,13 +2,13 @@ use std::fmt::Display;
 
 use ahash::AHashMap;
 use hex2d::Angle;
-use math::{EdgePos, HexCoord, HexEdges};
+use math::{Aliveness, EdgePos, EdgesState, HexCoord, RestrictedHexDir};
 
 pub mod math;
 
 #[derive(Clone)]
 pub struct Board {
-    cells: AHashMap<HexCoord, HexEdges>,
+    cells: AHashMap<HexCoord, u8>,
 }
 
 impl Board {
@@ -18,63 +18,142 @@ impl Board {
         }
     }
 
-    /// Return whether that edge is alive.
-    pub fn is_alive(&self, pos: EdgePos) -> bool {
+    pub fn get_liveness(&self, pos: EdgePos) -> Aliveness {
         match self.cells.get(&pos.coord()) {
-            None => false,
-            Some(edges) => edges.contains(pos.edge()),
+            None => Aliveness::Dead,
+            Some(edges) => {
+                let state = EdgesState::unpack(*edges);
+                state.get(pos.edge())
+            }
         }
     }
 
     /// Set the edge to be alive or not.
-    pub fn set_alive(&mut self, pos: EdgePos, alive: bool) {
-        if alive {
-            let edges = self.cells.entry(pos.coord()).or_default();
-            edges.insert(pos.edge());
-        } else if let Some(here) = self.cells.get_mut(&pos.coord()) {
-            // Don't bother creating and then immediately removing
-            here.remove(pos.edge());
+    pub fn set_alive(&mut self, pos: EdgePos, alive: Aliveness) {
+        match alive {
+            Aliveness::Barren | Aliveness::Alive => {
+                let here = self.cells.entry(pos.coord()).or_default();
+                let mut state = EdgesState::unpack(*here);
+                state.set(pos.edge(), alive);
+                *here = state.pack();
+            }
+            Aliveness::Dead => {
+                // Don't bother creating and then immediately removing
+                if let Some(here) = self.cells.get_mut(&pos.coord()) {
+                    let mut state = EdgesState::unpack(*here);
+                    state.set(pos.edge(), alive);
+                    let packed = state.pack();
+                    if packed == 0 {
+                        self.cells.remove(&pos.coord());
+                    } else {
+                        *here = packed;
+                    }
+                } // else we're trying to kill an already live cell
+            }
         }
     }
 
-    pub fn toggle_alive(&mut self, pos: EdgePos) {
-        let alive_here = self.is_alive(pos);
-        self.set_alive(pos, !alive_here);
+    /// Go dead or barren to alive, alive to dead
+    pub fn twiddle_alive(&mut self, pos: EdgePos) {
+        let alive_here = self.get_liveness(pos);
+        self.set_alive(
+            pos,
+            match alive_here {
+                Aliveness::Dead | Aliveness::Barren => Aliveness::Alive,
+                _ => Aliveness::Dead,
+            },
+        );
     }
 
     /// Get the three edges at the given position
-    pub fn get_edges(&self, pos: HexCoord) -> Option<HexEdges> {
-        self.cells.get(&pos).copied()
+    pub fn get_edges(&self, pos: HexCoord) -> Option<EdgesState> {
+        self.cells.get(&pos).copied().map(EdgesState::unpack)
     }
 
     pub fn apply_rule(&mut self, rule: Rule) {
         // Maps edge positions to the number of neighbors there.
-        let mut neighbor_count = AHashMap::<EdgePos, u8>::new();
+        enum Update {
+            NormalNeighborCount(u8),
+            Barren,
+        }
+        let mut updates = AHashMap::<EdgePos, Update>::new();
 
-        for (&coord, &edges) in self.cells.iter() {
-            for edge in edges {
+        for (&coord, &packed) in self.cells.iter() {
+            for edge in [
+                RestrictedHexDir::XY,
+                RestrictedHexDir::ZY,
+                RestrictedHexDir::ZX,
+            ] {
+                let state = EdgesState::unpack(packed);
                 let here = EdgePos::new(coord, edge.to_hex2d());
-                if !neighbor_count.contains_key(&here) {
-                    neighbor_count.insert(here, 0);
-                }
+                let liveness = state.get(here.edge());
+                match liveness {
+                    Aliveness::Barren => {
+                        updates.insert(here, Update::Barren);
+                    }
+                    Aliveness::Dead => {
+                        if !updates.contains_key(&here) {
+                            updates.insert(here, Update::NormalNeighborCount(0));
+                        }
+                    }
+                    Aliveness::Alive => {
+                        if !updates.contains_key(&here) {
+                            updates.insert(here, Update::NormalNeighborCount(0));
+                        }
 
-                for neighbor in rule.neighbors.neighbors(here) {
-                    let slot = neighbor_count.entry(neighbor).or_default();
-                    *slot += 1;
+                        for neighbor in rule.neighbors.neighbors(here) {
+                            let neighbor_state = self.get_liveness(neighbor);
+                            if neighbor_state != Aliveness::Barren {
+                                match updates.get_mut(&neighbor) {
+                                    None => {
+                                        updates.insert(neighbor, Update::NormalNeighborCount(1));
+                                    }
+                                    Some(Update::NormalNeighborCount(ref mut count)) => {
+                                        *count += 1;
+                                    }
+                                    Some(Update::Barren) => {
+                                        // This branch shouldn't be taken but I don't think it's bad to
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
 
-        for (edge_pos, count) in neighbor_count.into_iter() {
-            let should_be_alive = match self.is_alive(edge_pos) {
-                true => (rule.survive_mask & (1 << count)) != 0,
-                false => (rule.birth_mask & (1 << count)) != 0,
-            };
-            // println!(
-            //     "{:?} has {} live neighbors, setting {}",
-            //     edge_pos, count, should_be_alive
-            // );
-            self.set_alive(edge_pos, should_be_alive);
+        for (edge_pos, update) in updates.into_iter() {
+            match update {
+                Update::NormalNeighborCount(count) => {
+                    let alive = match self.get_liveness(edge_pos) {
+                        Aliveness::Alive => {
+                            if (rule.survive_mask & (1 << count)) != 0 {
+                                Aliveness::Alive
+                            } else {
+                                Aliveness::Barren
+                            }
+                        }
+                        Aliveness::Dead => {
+                            if (rule.birth_mask & (1 << count)) != 0 {
+                                Aliveness::Alive
+                            } else {
+                                Aliveness::Dead
+                            }
+                        }
+                        Aliveness::Barren => {
+                            panic!("should never be trying to update a barren cell normally")
+                        }
+                    };
+                    // println!(
+                    //     "{:?} has {} live neighbors, setting {}",
+                    //     edge_pos, count, should_be_alive
+                    // );
+                    self.set_alive(edge_pos, alive);
+                }
+                Update::Barren => {
+                    self.set_alive(edge_pos, Aliveness::Dead);
+                }
+            }
         }
     }
 
@@ -134,6 +213,8 @@ pub enum NeighborRegion {
     Four,
     Six,
     EightCross,
+    EightParallel,
+    Ten,
 }
 
 impl NeighborRegion {
@@ -142,6 +223,8 @@ impl NeighborRegion {
             NeighborRegion::Four => 4,
             NeighborRegion::Six => 6,
             NeighborRegion::EightCross => 8,
+            NeighborRegion::EightParallel => 8,
+            NeighborRegion::Ten => 10,
         }
     }
     fn neighbors(&self, pos: EdgePos) -> Vec<EdgePos> {
@@ -173,6 +256,32 @@ impl NeighborRegion {
                 EdgePos::new(neighbor_pos, real_dir + Angle::LeftBack),
                 EdgePos::new(neighbor_pos, real_dir + Angle::RightBack),
             ],
+            NeighborRegion::EightParallel => {
+                let ccw_neighbor = coord + (real_dir + Angle::Left);
+                let cw_neighbor = coord + (real_dir + Angle::Right);
+                vec![
+                    EdgePos::new(coord, real_dir + Angle::Left),
+                    EdgePos::new(coord, real_dir + Angle::Right),
+                    EdgePos::new(neighbor_pos, real_dir + Angle::LeftBack),
+                    EdgePos::new(neighbor_pos, real_dir + Angle::RightBack),
+                    EdgePos::new(ccw_neighbor, real_dir),
+                    EdgePos::new(ccw_neighbor, real_dir + Angle::Back),
+                    EdgePos::new(cw_neighbor, real_dir),
+                    EdgePos::new(cw_neighbor, real_dir + Angle::Back),
+                ]
+            }
+            NeighborRegion::Ten => vec![
+                EdgePos::new(coord, real_dir + Angle::Left),
+                EdgePos::new(coord, real_dir + Angle::Right),
+                EdgePos::new(coord, real_dir + Angle::LeftBack),
+                EdgePos::new(coord, real_dir + Angle::RightBack),
+                EdgePos::new(coord, real_dir + Angle::Back),
+                EdgePos::new(neighbor_pos, real_dir + Angle::Left),
+                EdgePos::new(neighbor_pos, real_dir + Angle::Right),
+                EdgePos::new(neighbor_pos, real_dir + Angle::LeftBack),
+                EdgePos::new(neighbor_pos, real_dir + Angle::RightBack),
+                EdgePos::new(neighbor_pos, real_dir),
+            ],
         }
     }
 }
@@ -183,6 +292,8 @@ impl Display for NeighborRegion {
             NeighborRegion::Four => write!(f, "4"),
             NeighborRegion::Six => write!(f, "6"),
             NeighborRegion::EightCross => write!(f, "8*"),
+            NeighborRegion::EightParallel => write!(f, "8="),
+            NeighborRegion::Ten => write!(f, "10"),
         }
     }
 }

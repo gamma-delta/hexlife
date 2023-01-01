@@ -67,7 +67,7 @@ impl GameState {
             //     self.prev_clicked_edge, mouse_edge, should_toggle
             // );
             if should_toggle {
-                self.board.toggle_alive(mouse_edge);
+                self.board.twiddle_alive(mouse_edge);
             }
             self.prev_clicked_edge = Some(mouse_edge);
         } else {

@@ -3,7 +3,7 @@ use std::f32::consts::TAU;
 use crate::{px_to_coord, GameState, SQRT_3};
 
 use hex2d::Coordinate;
-use hexlife::math::{EdgePos, RestrictedHexDir};
+use hexlife::math::{Aliveness, EdgePos, RestrictedHexDir};
 use macroquad::prelude::*;
 
 impl GameState {
@@ -67,12 +67,13 @@ impl GameState {
                 RestrictedHexDir::ZY,
                 RestrictedHexDir::ZX,
             ]) {
-                let color = if mouse_edge == EdgePos::new_raw(coord, edge) {
-                    Some(Color::new(0.2, 0.2, 0.6, 1.0))
-                } else if edges.contains(edge) {
-                    None
-                } else {
-                    Some(Color::new(0.3, 0.4, 0.6, 1.0))
+                let color = match edges.get(edge) {
+                    _ if mouse_edge == EdgePos::new_raw(coord, edge) => {
+                        Some(Color::new(0.2, 0.2, 0.6, 1.0))
+                    }
+                    Aliveness::Dead => Some(Color::new(0.3, 0.4, 0.6, 1.0)),
+                    Aliveness::Barren => Some(Color::new(0.3, 0.0, 0.0, 1.0)),
+                    Aliveness::Alive => None,
                 };
 
                 if let Some(color) = color {
@@ -91,16 +92,16 @@ impl GameState {
                 (RestrictedHexDir::ZX, TAU * 3.0 / 6.0),
             ] {
                 let pos = EdgePos::new_raw(coord, edge);
-                let color = if mouse_edge == pos {
-                    Some(if self.board.is_alive(pos) {
-                        Color::new(0.7, 0.6, 0.7, 1.0)
-                    } else {
-                        Color::new(0.4, 0.3, 0.2, 1.0)
-                    })
-                } else if edges.contains(edge) {
-                    Some(Color::new(0.7, 0.6, 0.5, 1.0))
-                } else {
-                    None
+                let mouse_here = mouse_edge == pos;
+
+                let color = match (edges.get(edge), mouse_here) {
+                    (Aliveness::Dead | Aliveness::Barren, true) => {
+                        Some(Color::new(0.4, 0.3, 0.2, 1.0))
+                    }
+                    (Aliveness::Alive, true) => Some(Color::new(0.7, 0.6, 0.7, 1.0)),
+                    (Aliveness::Dead, false) => None,
+                    (Aliveness::Barren, false) => Some(Color::new(0.5, 0.2, 0.1, 1.0)),
+                    (Aliveness::Alive, false) => Some(Color::new(0.7, 0.6, 0.5, 1.0)),
                 };
 
                 if let Some(color) = color {

@@ -1,12 +1,6 @@
 //! Math and coordinate primitives.
 
-use enumflags2::{bitflags, BitFlags};
 use hex2d::{Coordinate, Direction};
-
-/// Because (say) the bottom edge of a hexagon is the same as the top edge of
-/// the hex below it, internally we only store the coordinate and whether it has
-/// a connection in the `XY`, `ZY`, and `ZX` dirs.
-pub type HexEdges = BitFlags<RestrictedHexDir>;
 
 pub type HexCoord = Coordinate<i64>;
 
@@ -47,7 +41,6 @@ impl EdgePos {
 }
 
 /// Hex direction but only for the 3 directions we track on the coord
-#[bitflags]
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum RestrictedHexDir {
@@ -80,5 +73,74 @@ pub(crate) fn canonicalize(coord: HexCoord, dir: Direction) -> (HexCoord, Restri
         Direction::YX => (coord + Direction::YX, RestrictedHexDir::XY),
         Direction::YZ => (coord + Direction::YZ, RestrictedHexDir::ZY),
         Direction::XZ => (coord + Direction::XZ, RestrictedHexDir::ZX),
+    }
+}
+
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Default)]
+#[repr(u8)]
+pub enum Aliveness {
+    #[default]
+    Dead = 0,
+    Barren = 1,
+    Alive = 2,
+}
+
+impl Aliveness {
+    fn unconvert(x: u8) -> Self {
+        match x {
+            0 => Aliveness::Dead,
+            1 => Aliveness::Barren,
+            2 => Aliveness::Alive,
+            _ => unreachable!(),
+        }
+    }
+}
+
+/// Thing we pretend to use internally tracking the liveness of the three edges.
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Default)]
+pub struct EdgesState {
+    xy: Aliveness,
+    zy: Aliveness,
+    zx: Aliveness,
+}
+
+impl EdgesState {
+    pub fn new(xy: Aliveness, zy: Aliveness, zx: Aliveness) -> Self {
+        Self { xy, zy, zx }
+    }
+
+    pub fn get(&self, edge: RestrictedHexDir) -> Aliveness {
+        match edge {
+            RestrictedHexDir::XY => self.xy,
+            RestrictedHexDir::ZY => self.zy,
+            RestrictedHexDir::ZX => self.zx,
+        }
+    }
+
+    pub fn set(&mut self, edge: RestrictedHexDir, alive: Aliveness) {
+        let slot = match edge {
+            RestrictedHexDir::XY => &mut self.xy,
+            RestrictedHexDir::ZY => &mut self.zy,
+            RestrictedHexDir::ZX => &mut self.zx,
+        };
+        *slot = alive;
+    }
+
+    /// Pack into a number from 0 to 26.
+    ///
+    /// The least significant trit is XY, then ZY, then ZX.
+    pub(crate) fn pack(&self) -> u8 {
+        self.xy as u8 + self.zy as u8 * 3 + self.zx as u8 * 9
+    }
+
+    pub(crate) fn unpack(packed: u8) -> Self {
+        let xy = (packed / 1) % 3;
+        let zy = (packed / 3) % 3;
+        let zx = (packed / 9) % 3;
+        Self {
+            xy: Aliveness::unconvert(xy),
+            zy: Aliveness::unconvert(zy),
+            zx: Aliveness::unconvert(zx),
+        }
     }
 }
