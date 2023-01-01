@@ -35,7 +35,7 @@ impl GameState {
     fn new() -> Self {
         Self {
             board: Board::new(),
-            rule: Rule::new_raw(0b0001000, 0b0011100, NeighborRegion::Ten),
+            rule: Rule::new_raw(0b0000100, 0b0001000, NeighborRegion::EightCross),
             running: RunState::Stopped,
 
             drag_state: None,

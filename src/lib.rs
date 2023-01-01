@@ -82,7 +82,7 @@ impl Board {
                 let here = EdgePos::new(coord, edge.to_hex2d());
                 let liveness = state.get(here.edge());
 
-                if liveness == Aliveness::Alive || liveness == Aliveness::Barren {
+                if liveness == Aliveness::Alive {
                     for neighbor in rule.neighbors.neighbors(here) {
                         let neighbor_state = self.get_liveness(neighbor);
                         if neighbor_state != Aliveness::Barren {
