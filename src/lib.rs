@@ -28,15 +28,12 @@ impl Board {
 
     /// Set the edge to be alive or not.
     pub fn set_alive(&mut self, pos: EdgePos, alive: bool) {
-        let edges = self.cells.entry(pos.coord()).or_default();
         if alive {
+            let edges = self.cells.entry(pos.coord()).or_default();
             edges.insert(pos.edge());
-        } else {
-            edges.remove(pos.edge());
-            if edges.is_empty() {
-                // no need to keep extra memory around
-                self.cells.remove(&pos.coord());
-            }
+        } else if let Some(here) = self.cells.get_mut(&pos.coord()) {
+            // Don't bother creating and then immediately removing
+            here.remove(pos.edge());
         }
     }
 
@@ -80,6 +77,10 @@ impl Board {
             self.set_alive(edge_pos, should_be_alive);
         }
     }
+
+    pub fn clear(&mut self) {
+        self.cells.clear();
+    }
 }
 
 /// Instructions on how to update the board.
@@ -122,7 +123,7 @@ impl Display for Rule {
                 write!(f, "{}", i)?;
             }
         }
-        write!(f, "/{}", self.neighbors.count())?;
+        write!(f, "/@{}", self.neighbors.count())?;
         Ok(())
     }
 }
