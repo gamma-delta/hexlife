@@ -94,6 +94,12 @@ impl Aliveness {
             _ => unreachable!(),
         }
     }
+    pub fn flip(&self) -> Self {
+        match self {
+            Aliveness::Dead | Aliveness::Barren => Aliveness::Alive,
+            _ => Aliveness::Dead,
+        }
+    }
 }
 
 /// Thing we pretend to use internally tracking the liveness of the three edges.

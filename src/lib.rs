@@ -58,10 +58,7 @@ impl Board {
         let alive_here = self.get_liveness(pos);
         self.set_alive(
             pos,
-            match alive_here {
-                Aliveness::Dead | Aliveness::Barren => Aliveness::Alive,
-                _ => Aliveness::Dead,
-            },
+            alive_here.flip(),
         );
     }
 

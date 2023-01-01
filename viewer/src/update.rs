@@ -61,17 +61,11 @@ impl GameState {
 
         if is_mouse_button_down(MouseButton::Left) {
             let mouse_edge = self.mouse_edge();
-            let should_toggle = self.prev_clicked_edge != Some(mouse_edge);
-            // println!(
-            //     "{:?}, {:?}; {}",
-            //     self.prev_clicked_edge, mouse_edge, should_toggle
-            // );
-            if should_toggle {
-                self.board.twiddle_alive(mouse_edge);
-            }
-            self.prev_clicked_edge = Some(mouse_edge);
+            let state = self.drag_state.unwrap_or_else(|| self.board.get_liveness(mouse_edge).flip());
+            self.board.set_alive(mouse_edge, state);
+            self.drag_state = Some(state);
         } else {
-            self.prev_clicked_edge = None;
+            self.drag_state = None;
         }
 
         if is_key_pressed(KeyCode::R) && is_key_down(KeyCode::LeftShift) {
