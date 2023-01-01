@@ -29,6 +29,10 @@ impl EdgePos {
         EdgePos { coord, edge }
     }
 
+    pub fn new_raw(coord: HexCoord, edge: RestrictedHexDir) -> EdgePos {
+        EdgePos { coord, edge }
+    }
+
     pub fn coord(&self) -> HexCoord {
         self.coord
     }
@@ -37,7 +41,7 @@ impl EdgePos {
         self.edge.to_hex2d()
     }
 
-    pub(crate) fn edge(&self) -> RestrictedHexDir {
+    pub fn edge(&self) -> RestrictedHexDir {
         self.edge
     }
 }

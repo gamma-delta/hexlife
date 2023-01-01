@@ -2,14 +2,13 @@ use std::f32::consts::TAU;
 
 use crate::{px_to_coord, GameState, SQRT_3};
 
-use hexlife::math::RestrictedHexDir;
+use hex2d::Coordinate;
+use hexlife::math::{EdgePos, RestrictedHexDir};
 use macroquad::prelude::*;
 
 impl GameState {
     pub fn draw(&self) {
         clear_background(Color::from_rgba(0x05, 0x07, 0x10, 0xff));
-
-        let mouse_hexpos = self.screen_to_hex(mouse_position().into());
 
         enum DrawStage {
             Background,
@@ -28,7 +27,7 @@ impl GameState {
                     let px = self.hex_to_screen(coord);
 
                     match stage {
-                        DrawStage::Background => self.draw_background(coord, mouse_hexpos, px),
+                        DrawStage::Background => self.draw_background(coord, px),
                         DrawStage::Edges => self.draw_edges(coord, px),
                     }
                 }
@@ -51,8 +50,9 @@ impl GameState {
         );
     }
 
-    fn draw_edges(&self, coord: hex2d::Coordinate<i64>, px: Vec2) {
+    fn draw_edges(&self, coord: Coordinate<i64>, px: Vec2) {
         let edges = self.board.get_edges(coord).unwrap_or_default();
+        let mouse_edge = self.mouse_edge();
 
         if self.draw_mode.do_edges() {
             for (angle, edge) in [
@@ -67,58 +67,56 @@ impl GameState {
                 RestrictedHexDir::ZY,
                 RestrictedHexDir::ZX,
             ]) {
-                if !edges.contains(edge) {
+                let color = if mouse_edge == EdgePos::new_raw(coord, edge) {
+                    Some(Color::new(0.2, 0.2, 0.6, 1.0))
+                } else if edges.contains(edge) {
+                    None
+                } else {
+                    Some(Color::new(0.3, 0.4, 0.6, 1.0))
+                };
+
+                if let Some(color) = color {
                     let sx = angle[0].cos() * self.zoom;
                     let sy = -angle[0].sin() * self.zoom;
                     let ex = angle[1].cos() * self.zoom;
                     let ey = -angle[1].sin() * self.zoom;
-                    draw_line(
-                        sx + px.x,
-                        sy + px.y,
-                        ex + px.x,
-                        ey + px.y,
-                        1.5,
-                        Color::new(0.3, 0.4, 0.6, 1.0),
-                    );
+                    draw_line(sx + px.x, sy + px.y, ex + px.x, ey + px.y, 1.5, color);
                 }
             }
         }
         if self.draw_mode.do_connectors() {
-            for (dir, angle) in [
+            for (edge, angle) in [
                 (RestrictedHexDir::XY, TAU * 1.0 / 6.0),
                 (RestrictedHexDir::ZY, TAU * 2.0 / 6.0),
                 (RestrictedHexDir::ZX, TAU * 3.0 / 6.0),
             ] {
-                if edges.contains(dir) {
+                let pos = EdgePos::new_raw(coord, edge);
+                let color = if mouse_edge == pos {
+                    Some(if self.board.is_alive(pos) {
+                        Color::new(0.7, 0.6, 0.7, 1.0)
+                    } else {
+                        Color::new(0.4, 0.3, 0.2, 1.0)
+                    })
+                } else if edges.contains(edge) {
+                    Some(Color::new(0.7, 0.6, 0.5, 1.0))
+                } else {
+                    None
+                };
+
+                if let Some(color) = color {
                     let ex = angle.cos() * self.zoom * SQRT_3;
                     let ey = -angle.sin() * self.zoom * SQRT_3;
-                    draw_line(
-                        px.x,
-                        px.y,
-                        ex + px.x,
-                        ey + px.y,
-                        1.5,
-                        Color::new(0.7, 0.6, 0.5, 1.0),
-                    );
+                    draw_line(px.x, px.y, ex + px.x, ey + px.y, 2.0, color);
                 }
             }
         }
     }
 
-    fn draw_background(
-        &self,
-        coord: hex2d::Coordinate<i64>,
-        mouse_hexpos: hex2d::Coordinate<i64>,
-        px: Vec2,
-    ) {
-        let color = if coord == mouse_hexpos {
-            Color::new(0.15, 0.4, 0.3, 1.0)
-        } else {
-            Color::from_vec(
-                Vec4::new(0.01, 0.02, 0.05, 1.0)
-                    * [1.0, 1.25, 1.5, 1.75][(coord.x + coord.y * 3).rem_euclid(4) as usize],
-            )
-        };
+    fn draw_background(&self, coord: hex2d::Coordinate<i64>, px: Vec2) {
+        let color = Color::from_vec(
+            Vec4::new(0.01, 0.02, 0.05, 1.0)
+                * [1.0, 1.25, 1.5, 1.75][(coord.x + coord.y * 3).rem_euclid(4) as usize],
+        );
         draw_poly(px.x, px.y, 6, self.zoom, 360.0 / 12.0, color);
         if is_key_down(KeyCode::LeftControl) {
             draw_text(

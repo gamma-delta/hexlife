@@ -86,20 +86,20 @@ impl Board {
 /// Instructions on how to update the board.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Rule {
-    birth_mask: u8,
-    survive_mask: u8,
+    birth_mask: u32,
+    survive_mask: u32,
     neighbors: NeighborRegion,
 }
 
 impl Rule {
-    pub fn new_raw(birth_mask: u8, survive_mask: u8, neighbors: NeighborRegion) -> Self {
+    pub fn new_raw(birth_mask: u32, survive_mask: u32, neighbors: NeighborRegion) -> Self {
         assert!(
-            birth_mask < (1 << neighbors.count()),
-            "cannot have bits set above the neighbor count"
+            birth_mask <= (1 << (neighbors.count() + 1)),
+            "cannot have birth bits set above the neighbor count"
         );
         assert!(
-            survive_mask < (1 << neighbors.count()),
-            "cannot have bits set above the neighbor count"
+            survive_mask <= (1 << (neighbors.count() + 1)),
+            "cannot have survival bits set above the neighbor count"
         );
         Self {
             birth_mask,
@@ -112,18 +112,18 @@ impl Rule {
 impl Display for Rule {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "B")?;
-        for i in 0..5 {
+        for i in 0..=self.neighbors.count() {
             if self.birth_mask & (1 << i) != 0 {
-                write!(f, "{}", i)?;
+                write!(f, "{:x}", i)?;
             }
         }
         write!(f, "/S")?;
-        for i in 0..5 {
+        for i in 0..=self.neighbors.count() {
             if self.survive_mask & (1 << i) != 0 {
-                write!(f, "{}", i)?;
+                write!(f, "{:x}", i)?;
             }
         }
-        write!(f, "/@{}", self.neighbors.count())?;
+        write!(f, "/@{}", self.neighbors)?;
         Ok(())
     }
 }
@@ -133,13 +133,15 @@ impl Display for Rule {
 pub enum NeighborRegion {
     Four,
     Six,
+    EightCross,
 }
 
 impl NeighborRegion {
-    fn count(&self) -> u8 {
+    fn count(&self) -> u32 {
         match self {
             NeighborRegion::Four => 4,
             NeighborRegion::Six => 6,
+            NeighborRegion::EightCross => 8,
         }
     }
     fn neighbors(&self, pos: EdgePos) -> Vec<EdgePos> {
@@ -161,6 +163,26 @@ impl NeighborRegion {
                 EdgePos::new(neighbor_pos, real_dir + Angle::RightBack),
                 EdgePos::new(neighbor_pos, real_dir),
             ],
+            NeighborRegion::EightCross => vec![
+                EdgePos::new(coord, real_dir + Angle::Left),
+                EdgePos::new(coord, real_dir + Angle::Right),
+                EdgePos::new(coord, real_dir + Angle::LeftBack),
+                EdgePos::new(coord, real_dir + Angle::RightBack),
+                EdgePos::new(neighbor_pos, real_dir + Angle::Left),
+                EdgePos::new(neighbor_pos, real_dir + Angle::Right),
+                EdgePos::new(neighbor_pos, real_dir + Angle::LeftBack),
+                EdgePos::new(neighbor_pos, real_dir + Angle::RightBack),
+            ],
+        }
+    }
+}
+
+impl Display for NeighborRegion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            NeighborRegion::Four => write!(f, "4"),
+            NeighborRegion::Six => write!(f, "6"),
+            NeighborRegion::EightCross => write!(f, "8*"),
         }
     }
 }

@@ -9,15 +9,6 @@ impl GameState {
     }
 
     fn tick_board(&mut self) {
-        if is_key_pressed(KeyCode::Space) {
-            self.running = if self.running == RunState::Run {
-                RunState::Stopped
-            } else {
-                RunState::Run
-            };
-        } else if is_key_pressed(KeyCode::Enter) {
-            self.running = RunState::OneStep;
-        }
         match self.running {
             RunState::Stopped => {}
             RunState::OneStep => {
@@ -87,8 +78,18 @@ impl GameState {
             self.board.clear();
         }
 
-        if is_key_pressed(KeyCode::Tab) {
+        if is_key_pressed(KeyCode::Enter) {
             self.draw_mode = self.draw_mode.next();
+        }
+
+        if is_key_pressed(KeyCode::Space) {
+            self.running = if self.running == RunState::Run {
+                RunState::Stopped
+            } else {
+                RunState::Run
+            };
+        } else if is_key_pressed(KeyCode::Tab) {
+            self.running = RunState::OneStep;
         }
     }
 }
