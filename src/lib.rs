@@ -58,7 +58,10 @@ impl Board {
         let alive_here = self.get_liveness(pos);
         self.set_alive(
             pos,
-            alive_here.flip(),
+            match alive_here {
+                Aliveness::Dead | Aliveness::Barren => Aliveness::Alive,
+                _ => Aliveness::Dead,
+            },
         );
     }
 
@@ -84,37 +87,32 @@ impl Board {
                 let state = EdgesState::unpack(packed);
                 let here = EdgePos::new(coord, edge.to_hex2d());
                 let liveness = state.get(here.edge());
-                match liveness {
-                    Aliveness::Barren => {
-                        updates.insert(here, Update::Barren);
-                    }
-                    Aliveness::Dead => {
-                        if !updates.contains_key(&here) {
-                            updates.insert(here, Update::NormalNeighborCount(0));
-                        }
-                    }
-                    Aliveness::Alive => {
-                        if !updates.contains_key(&here) {
-                            updates.insert(here, Update::NormalNeighborCount(0));
-                        }
 
-                        for neighbor in rule.neighbors.neighbors(here) {
-                            let neighbor_state = self.get_liveness(neighbor);
-                            if neighbor_state != Aliveness::Barren {
-                                match updates.get_mut(&neighbor) {
-                                    None => {
-                                        updates.insert(neighbor, Update::NormalNeighborCount(1));
-                                    }
-                                    Some(Update::NormalNeighborCount(ref mut count)) => {
-                                        *count += 1;
-                                    }
-                                    Some(Update::Barren) => {
-                                        // This branch shouldn't be taken but I don't think it's bad to
-                                    }
+                if liveness == Aliveness::Alive || liveness == Aliveness::Barren {
+                    for neighbor in rule.neighbors.neighbors(here) {
+                        let neighbor_state = self.get_liveness(neighbor);
+                        if neighbor_state != Aliveness::Barren {
+                            match updates.get_mut(&neighbor) {
+                                None => {
+                                    updates.insert(neighbor, Update::NormalNeighborCount(1));
+                                }
+                                Some(Update::NormalNeighborCount(ref mut count)) => {
+                                    *count += 1;
+                                }
+                                Some(Update::Barren) => {
+                                    // This branch shouldn't be taken but I don't think it's bad to
                                 }
                             }
                         }
                     }
+                }
+
+                if liveness == Aliveness::Alive || liveness == Aliveness::Dead {
+                    if !updates.contains_key(&here) {
+                        updates.insert(here, Update::NormalNeighborCount(0));
+                    }
+                } else {
+                    updates.insert(here, Update::Barren);
                 }
             }
         }
