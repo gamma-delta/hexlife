@@ -60,18 +60,8 @@ impl Board {
                 if !neighbor_count.contains_key(&here) {
                     neighbor_count.insert(here, 0);
                 }
-                let real_dir = edge.to_hex2d();
-                let neighbor_pos = coord + real_dir;
-                // Pick six "neighbors":
-                // the four direct neighbors and the 2 distant neighbors.
-                for neighbor in [
-                    EdgePos::new(coord, real_dir + Angle::Left),
-                    EdgePos::new(coord, real_dir + Angle::Right),
-                    EdgePos::new(coord, real_dir + Angle::Back),
-                    EdgePos::new(neighbor_pos, real_dir + Angle::LeftBack),
-                    EdgePos::new(neighbor_pos, real_dir + Angle::RightBack),
-                    EdgePos::new(neighbor_pos, real_dir),
-                ] {
+
+                for neighbor in rule.neighbors.neighbors(here) {
                     let slot = neighbor_count.entry(neighbor).or_default();
                     *slot += 1;
                 }
@@ -97,17 +87,23 @@ impl Board {
 pub struct Rule {
     birth_mask: u8,
     survive_mask: u8,
+    neighbors: NeighborRegion,
 }
 
 impl Rule {
-    pub fn new_raw(birth_mask: u8, survive_mask: u8) -> Self {
+    pub fn new_raw(birth_mask: u8, survive_mask: u8, neighbors: NeighborRegion) -> Self {
         assert!(
-            birth_mask <= 0b1111111 && survive_mask <= 0b1111111,
-            "only masks with the low 7 bits set make any sense"
+            birth_mask < (1 << neighbors.count()),
+            "cannot have bits set above the neighbor count"
+        );
+        assert!(
+            survive_mask < (1 << neighbors.count()),
+            "cannot have bits set above the neighbor count"
         );
         Self {
             birth_mask,
             survive_mask,
+            neighbors,
         }
     }
 }
@@ -126,6 +122,44 @@ impl Display for Rule {
                 write!(f, "{}", i)?;
             }
         }
+        write!(f, "/{}", self.neighbors.count())?;
         Ok(())
+    }
+}
+
+/// What is considered to be a neighbor?
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NeighborRegion {
+    Four,
+    Six,
+}
+
+impl NeighborRegion {
+    fn count(&self) -> u8 {
+        match self {
+            NeighborRegion::Four => 4,
+            NeighborRegion::Six => 6,
+        }
+    }
+    fn neighbors(&self, pos: EdgePos) -> Vec<EdgePos> {
+        let coord = pos.coord();
+        let real_dir = pos.edge().to_hex2d();
+        let neighbor_pos = pos.coord() + real_dir;
+        match self {
+            NeighborRegion::Four => vec![
+                EdgePos::new(coord, real_dir + Angle::Left),
+                EdgePos::new(coord, real_dir + Angle::Right),
+                EdgePos::new(neighbor_pos, real_dir + Angle::LeftBack),
+                EdgePos::new(neighbor_pos, real_dir + Angle::RightBack),
+            ],
+            NeighborRegion::Six => vec![
+                EdgePos::new(coord, real_dir + Angle::Left),
+                EdgePos::new(coord, real_dir + Angle::Right),
+                EdgePos::new(coord, real_dir + Angle::Back),
+                EdgePos::new(neighbor_pos, real_dir + Angle::LeftBack),
+                EdgePos::new(neighbor_pos, real_dir + Angle::RightBack),
+                EdgePos::new(neighbor_pos, real_dir),
+            ],
+        }
     }
 }

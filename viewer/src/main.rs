@@ -3,11 +3,12 @@ use std::f32::consts::TAU;
 use hex2d::Direction;
 use hexlife::{
     math::{EdgePos, HexCoord, RestrictedHexDir},
-    Board, Rule,
+    Board, NeighborRegion, Rule,
 };
 use macroquad::prelude::*;
 
 const ZOOM_SPEED: f32 = 1.1;
+const SUPER_ZOOM_SPEED: f32 = 1.5;
 // Pick weird numbers to prevent the hexes moving an integer number
 const MOVE_SPEED: f32 = 17.0;
 const SUPER_MOVE_SPEED: f32 = 43.0;
@@ -19,9 +20,6 @@ struct GameState {
     rule: Rule,
     running: RunState,
 
-    // Transform is: worldspace - pos * zoom = screenspace
-    // (no operator precedence)
-    // Campos is in screen space
     campos: Vec2,
     zoom: f32,
 }
@@ -68,10 +66,15 @@ impl GameState {
 
         let mouse_prezoom = self.screen_to_world(mouse_position().into());
         let wheel_y = mouse_wheel().1;
+        let zoom_speed = if is_key_down(KeyCode::LeftShift) {
+            SUPER_ZOOM_SPEED
+        } else {
+            ZOOM_SPEED
+        };
         if wheel_y < 0.0 {
-            self.zoom /= ZOOM_SPEED;
+            self.zoom /= zoom_speed;
         } else if wheel_y > 0.0 {
-            self.zoom *= ZOOM_SPEED;
+            self.zoom *= zoom_speed;
         }
         let mouse_postzoom = self.screen_to_world(mouse_position().into());
         // javidx9 is the coolest person alive
@@ -230,7 +233,7 @@ fn config() -> Conf {
 async fn main() {
     let mut state = GameState {
         board: Board::new(),
-        rule: Rule::new_raw(0b0001000, 0b0001100),
+        rule: Rule::new_raw(0b0001000, 0b0001100, NeighborRegion::Six),
         running: RunState::Stopped,
 
         campos: Vec2::ZERO,
