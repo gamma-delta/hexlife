@@ -3,6 +3,40 @@ use macroquad::{
     prelude::{vec2, Vertex, WHITE},
 };
 
+pub struct FiddlyMiniquadBullshit {
+    pipeline: mnq::Pipeline,
+    bindings: mnq::Bindings,
+}
+
+fn build_bindings(&self, ctx: &mut miniquad::Context, pos_vert_buf: Buffer) -> mnq::Bindings {
+    let mut verts = vec![Vertex::new(0.0, 0.0, 1.0, 0.0, 0.0, WHITE)];
+    // TIL i cannot spell "twelfthfs"
+    for twelfths in [1, 3, 5, 7, 9, 11] {
+        let angle = TAU * twelfths as f32 / 12.0;
+        let (y, x) = angle.sin_cos();
+        verts.push(vec2(x, y));
+    }
+
+    let vert_buf = Buffer::immutable(ctx, BufferType::VertexBuffer, &verts);
+
+    #[rustfmt::skip]
+    let idxs = [
+        0, 1, 2,
+        0, 2, 3,
+        0, 3, 4,
+        0, 4, 5,
+        0, 5, 6,
+        0, 6, 1,
+    ];
+    let idx_buffer = Buffer::immutable(ctx, BufferType::IndexBuffer, &idxs);
+
+    mnq::Bindings {
+        vertex_buffers: vec![vert_buf],
+        index_buffer: vec![idx_buffer],
+        images: vec![],
+    }
+}
+
 /// Vertex shader taking advantage of instancing.
 /// https://learnopengl.com/Advanced-OpenGL/Instancing
 const VERT: &str = r##"
@@ -35,32 +69,3 @@ void main() {
     gl_FragColor = color;
 }
 "##;
-
-fn build_bindings(&self, ctx: &mut miniquad::Context, pos_vert_buf: Buffer) -> mnq::Bindings {
-    let mut verts = vec![Vertex::new(0.0, 0.0, 1.0, 0.0, 0.0, WHITE)];
-    // TIL i cannot spell "twelfthfs"
-    for twelfths in [1, 3, 5, 7, 9, 11] {
-        let angle = TAU * twelfths as f32 / 12.0;
-        let (y, x) = angle.sin_cos();
-        verts.push(vec2(x, y));
-    }
-
-    let vert_buf = Buffer::immutable(ctx, BufferType::VertexBuffer, &verts);
-
-    #[rustfmt::skip]
-    let idxs = [
-        0, 1, 2,
-        0, 2, 3,
-        0, 3, 4,
-        0, 4, 5,
-        0, 5, 6,
-        0, 6, 1,
-    ];
-    let idx_buffer = Buffer::immutable(ctx, BufferType::IndexBuffer, &idxs);
-
-    mnq::Bindings {
-        vertex_buffers: vec![vert_buf],
-        index_buffer: vec![idx_buffer],
-        images: vec![],
-    }
-}
