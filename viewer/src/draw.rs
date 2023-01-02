@@ -1,36 +1,25 @@
+mod shader;
+
 use std::f32::consts::TAU;
 
 use crate::{px_to_coord, GameState, SQRT_3};
 
 use hex2d::Coordinate;
-use hexlife::math::{Aliveness, EdgePos, RestrictedHexDir};
+use hexlife::math::{Aliveness, EdgePos, HexCoord, RestrictedHexDir};
 use macroquad::prelude::*;
 
 impl GameState {
     pub fn draw(&self) {
         clear_background(Color::from_rgba(0x05, 0x07, 0x10, 0xff));
 
-        enum DrawStage {
-            Background,
-            Edges,
-        }
+        self.draw_background();
 
         let corner_hexpos = self.screen_to_hex(Vec2::ZERO);
-
-        for stage in [DrawStage::Background, DrawStage::Edges] {
-            // it appears range_iter is bugged and only produces coords around 0
+        for offset_y in -1..=(screen_height() / self.zoom) as i64 + 1 {
             for offset_x in -1..=(screen_width() / self.zoom) as i64 + 1 {
-                for offset_y in -1..=(screen_height() / self.zoom) as i64 + 1 {
-                    let coord_offset = px_to_coord(vec2(offset_x as f32, offset_y as f32), 1.0);
-
-                    let coord = corner_hexpos + coord_offset;
-                    let px = self.hex_to_screen(coord);
-
-                    match stage {
-                        DrawStage::Background => self.draw_background(coord, px),
-                        DrawStage::Edges => self.draw_edges(coord, px),
-                    }
-                }
+                let coord_offset = px_to_coord(vec2(offset_x as f32, offset_y as f32), 1.0);
+                let coord = corner_hexpos + coord_offset;
+                self.draw_edges(coord);
             }
         }
 
@@ -50,7 +39,65 @@ impl GameState {
         );
     }
 
-    fn draw_edges(&self, coord: Coordinate<i64>, px: Vec2) {
+    fn draw_background(&self) {
+        let mut ctx = unsafe { macroquad::prelude::get_internal_gl() };
+
+        let colors = vec![
+            Color::from_vec(Vec4::new(0.01, 0.02, 0.05, 1.0)),
+            Color::from_vec(Vec4::new(0.01, 0.02, 0.05, 1.0) * 1.2),
+            Color::from_vec(Vec4::new(0.01, 0.02, 0.05, 1.0) * 1.35),
+            Color::from_vec(Vec4::new(0.01, 0.02, 0.05, 1.0) * 1.5),
+        ];
+
+        let corner_hexpos = self.screen_to_hex(Vec2::ZERO);
+        for offset_y in -1..=(screen_height() / self.zoom) as i64 + 1 {
+            let mut verts = Vec::new();
+            let mut idxes = Vec::new();
+            for (idx, offset_x) in (-1..=(screen_width() / self.zoom) as i64 + 1).enumerate() {
+                // for (idx, offset_x) in (-1..=0).enumerate() {
+                let coord_offset = px_to_coord(vec2(offset_x as f32, offset_y as f32), 1.0);
+                let coord = corner_hexpos + coord_offset;
+
+                let color = colors[(coord.x + coord.y * 3).rem_euclid(4) as usize];
+
+                let vert = |px: Vec2| Vertex::new(px.x, px.y, 1.0, 0.0, 0.0, color);
+                let anglevert = |twelfths: u8| {
+                    let px = self.angled_pos_of(coord, twelfths);
+                    vert(px)
+                };
+
+                // create the seven points
+                verts.push(vert(self.hex_to_screen(coord)));
+                verts.push(anglevert(1)); // bottom
+                verts.push(anglevert(3)); // bottom
+                verts.push(anglevert(5)); // bottom
+                verts.push(anglevert(7)); // bottom
+                verts.push(anglevert(9)); // bottom
+                verts.push(anglevert(11)); // bottom
+                let n0 = (7 * idx) as u16;
+                #[rustfmt::skip]
+                {
+                    idxes.push(n0); idxes.push(n0 + 1); idxes.push(n0 + 2);
+                    idxes.push(n0); idxes.push(n0 + 2); idxes.push(n0 + 3);
+                    idxes.push(n0); idxes.push(n0 + 3); idxes.push(n0 + 4);
+                    idxes.push(n0); idxes.push(n0 + 4); idxes.push(n0 + 5);
+                    idxes.push(n0); idxes.push(n0 + 5); idxes.push(n0 + 6);
+                    idxes.push(n0); idxes.push(n0 + 6); idxes.push(n0 + 1);
+                };
+            }
+
+            // println!("{:?}\n{:?}", &verts, idxes.chunks(3).collect::<Vec<_>>());
+            // panic!();
+            ctx.quad_gl.texture(None);
+            ctx.quad_gl.draw_mode(DrawMode::Triangles);
+            ctx.quad_gl.geometry(&verts, &idxes);
+        }
+
+        ctx.flush();
+    }
+
+    fn draw_edges(&self, coord: Coordinate<i64>) {
+        let px = self.hex_to_screen(coord);
         let edges = self.board.get_edges(coord).unwrap_or_default();
         let mouse_edge = self.mouse_edge();
 
@@ -113,20 +160,11 @@ impl GameState {
         }
     }
 
-    fn draw_background(&self, coord: hex2d::Coordinate<i64>, px: Vec2) {
-        let color = Color::from_vec(
-            Vec4::new(0.01, 0.02, 0.05, 1.0)
-                * [1.0, 1.25, 1.5, 1.75][(coord.x + coord.y * 3).rem_euclid(4) as usize],
-        );
-        draw_poly(px.x, px.y, 6, self.zoom, 360.0 / 12.0, color);
-        if is_key_down(KeyCode::LeftControl) {
-            draw_text(
-                &format!("{},{}", coord.x, coord.y),
-                px.x - self.zoom / 2.0,
-                px.y - self.zoom / 4.0,
-                self.zoom / 2.0,
-                WHITE,
-            );
-        }
+    // TIL i cannot spell "twelfthfs"
+    fn angled_pos_of(&self, pos: HexCoord, twelfths: u8) -> Vec2 {
+        let angle = TAU * twelfths as f32 / 12.0;
+        let (y, x) = angle.sin_cos();
+        let center = self.hex_to_screen(pos);
+        center + (vec2(x, -y) * self.zoom)
     }
 }
