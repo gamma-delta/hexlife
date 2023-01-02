@@ -1,4 +1,5 @@
-mod shader;
+mod mnq_bs;
+pub use mnq_bs::FiddlyMiniquadBullshit;
 
 use std::f32::consts::TAU;
 
@@ -6,6 +7,7 @@ use crate::{px_to_coord, GameState, SQRT_3};
 
 use hex2d::Coordinate;
 use hexlife::math::{Aliveness, EdgePos, HexCoord, RestrictedHexDir};
+use macroquad::miniquad as mnq;
 use macroquad::prelude::*;
 
 impl GameState {
@@ -160,7 +162,6 @@ impl GameState {
         }
     }
 
-    // TIL i cannot spell "twelfthfs"
     fn angled_pos_of(&self, pos: HexCoord, twelfths: u8) -> Vec2 {
         let angle = TAU * twelfths as f32 / 12.0;
         let (y, x) = angle.sin_cos();
